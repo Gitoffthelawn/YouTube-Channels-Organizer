@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>YouTube Categorizer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="accordion">
+            <button class="accordion-header" aria-expanded="false">API Key Management</button>
+            <div class="accordion-content" id="apiKeySection">
+                <input type="password" id="apiKey" placeholder="Enter YouTube API Key">
+                <button id="toggleApiKeyVisibility">Show</button>
+                <button id="saveApiKey">Save Key</button>
+                <p id="apiKeyStatus"></p>
+            </div>
+        </div>
+
+        <hr>
+
+        <h2>Current Channel</h2>
+        <div id="channelInfo">
+            <p>Loading channel info...</p>
+        </div>
+        <div id="channelActions" style="display:none;">
+            <p><strong>Channel Name:</strong> <span id="channelName"></span></p>
+            <p><strong>Channel ID:</strong> <span id="channelId"></span></p>
+            <div id="existingCategoriesDisplay"></div>
+
+            <select id="categorySelect">
+                <option value="">-- Select Category --</option>
+            </select>
+            <input type="text" id="newCategoryName" placeholder="Or new category name">
+            <button id="addChannelToCategory">Add/Update Category</button>
+        </div>
+        <p id="infoMessage"></p>
+        <hr>
+        <button id="viewCategories">View All Categories</button>
+    </div>
+    <script src="popup.js"></script>
+</body>
+</html>

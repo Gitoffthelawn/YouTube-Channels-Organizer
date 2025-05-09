@@ -1,0 +1,41 @@
+{
+    "manifest_version": 3,
+    "name": "YouTube Channels Organizer",
+    "version": "1.1.0",
+    "description": "Categorize YouTube channels and view their recent videos on Firefox.",
+    "permissions": [
+      "storage",
+      "activeTab",
+      "scripting",
+      "alarms"
+    ],
+    "host_permissions": [
+      "https://www.googleapis.com/"
+    ],
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": {
+        "16": "icons/icon16.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+      }
+    },
+    "background": {
+      "scripts": ["background.js"]
+    },
+    "icons": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "options_ui": {
+      "page": "categories.html",
+      "open_in_tab": true
+    },
+    "browser_specific_settings": {
+      "gecko": {
+        "id": "your-categorizer-id@example.com",
+        "strict_min_version": "109.0"
+      }
+    }
+  }
