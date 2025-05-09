@@ -31,8 +31,8 @@ Google provides 10k daily queries per day. The queries include fetching channel 
 3. Click on "Load unpacked" and upload the downloaded folder
 
 ### Firefox-based browsers
-1. Type `about:debugging` in the address bar and press Enter.
-2. Click on "This Firefox" (or "This Nightly/Developer Edition") on the left sidebar.
-3. Click "Load Temporary Add-on...".
-4. Navigate to your-firefox-extension-folder and select the manifest.json file.
+1. Type `about:config` in the address bar and press Enter. Click on "Accept Risk and continue".
+2. Search for `xpinstall.signatures.required` and set it to "False" by dounle-clicking on the row
+3. Open Add-ons Manager page `about:addons`
+4. From gear icon, select "Install add-on from file" and select the downloaded xpi file.
 
