@@ -21,7 +21,7 @@ I created this extension because I wanted to view view latest videos of my fav c
 5. Go to "APIs & Services" > "Credentials".
 6. Click "+ CREATE CREDENTIALS" > "API key".
 
-Google provides 10k daily queries per day. The queries include fetching channel names, channel IDs, and videos. You can view your limits [in this page](https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas?inv=1&invt=Abw5pw&project=yt-organizer-456016).
+Google provides 10k daily queries. The queries include fetching channel names, channel IDs, and videos. You can view your limits [in this page](https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas).
 
 ## Installation guidelines
 
