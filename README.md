@@ -7,7 +7,8 @@ I created this extension because I wanted to view view latest videos of my fav c
 #### Notes and features:
 - It fetches the latest 5 videos of each creator and shows them.
 - It uses your YT API for fetching videos and due to a daily limit, the more you fetch the faster you will hit the limit. I've tried implementing cache and other steps to limit the token usage.
-- You can edit/delete categories you created or remove the channels from the category. 
+- You can edit/delete/order categories you created or remove the channels from the category. 
+- You can also import and export your categories in csv.
 
 
 > Disclaimer: You'll need YouTube Data API V3 for this extension to work due to various limitations set by YT. This extension was created with the help of AI.
@@ -31,6 +32,7 @@ Google provides 10k daily queries. The queries include fetching channel names, c
 3. Click on "Load unpacked" and upload the downloaded folder
 
 ### Firefox-based browsers
+> FF users can install the extension from here: https://addons.mozilla.org/en-US/firefox/addon/youtube-channels-organizer/
 1. Type `about:config` in the address bar and press Enter. Click on "Accept Risk and continue".
 2. Search for `xpinstall.signatures.required` and set it to "False" by dounle-clicking on the row
 3. Open Add-ons Manager page `about:addons`

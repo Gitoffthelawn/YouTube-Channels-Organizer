@@ -1,4 +1,3 @@
-// --- DOM Elements (same as Chrome version) ---
 const apiKeyInput = document.getElementById('apiKey');
 const toggleApiKeyVisibilityButton = document.getElementById('toggleApiKeyVisibility');
 const saveApiKeyButton = document.getElementById('saveApiKey');
@@ -19,7 +18,6 @@ const existingCategoriesDisplay = document.getElementById('existingCategoriesDis
 
 let currentChannelData = null;
 
-// --- Accordion Logic (same as Chrome version) ---
 if (accordionHeader) {
     accordionHeader.addEventListener('click', () => {
         const isOpen = apiKeySection.classList.toggle('open');
@@ -27,7 +25,6 @@ if (accordionHeader) {
     });
 }
 
-// --- API Key Management ---
 toggleApiKeyVisibilityButton.addEventListener('click', () => {
     if (apiKeyInput.type === 'password') {
         apiKeyInput.type = 'text';
@@ -90,10 +87,10 @@ async function loadApiKey() {
     }
 }
 
-// --- Channel Info & Categorization ---
 async function getCurrentTabInfo() {
     try {
-        const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+        const tabs = await browser.tabs.query({ active: true, currentWindow: true });
+        const tab = tabs[0];
         if (tab && tab.url && tab.url.includes("youtube.com/watch")) {
             const videoId = new URL(tab.url).searchParams.get("v");
             if (videoId) {
@@ -114,7 +111,7 @@ async function getCurrentTabInfo() {
                     await loadCategoriesForSelect();
                     await checkIfChannelExists(currentChannelData.id);
                 } else {
-                    channelInfoDiv.innerHTML = `<p class="error">Could not fetch channel info. Is API key valid and YouTube page loaded?</p>`;
+                    channelInfoDiv.innerHTML = `<p class="error">Could not fetch channel info. Is API key valid?</p>`;
                 }
             } else {
                 channelInfoDiv.innerHTML = "<p>Not a YouTube video page (no video ID).</p>";
@@ -126,7 +123,7 @@ async function getCurrentTabInfo() {
         }
     } catch (error) {
         console.error("Error getting current tab info:", error);
-        channelInfoDiv.innerHTML = `<p class="error">Error: ${error.message}. Try reloading the extension or browser.</p>`;
+        channelInfoDiv.innerHTML = `<p class="error">Error: ${error.message}. Try reloading.</p>`;
         channelActionsDiv.style.display = 'none';
     }
 }
@@ -142,9 +139,7 @@ async function loadCategoriesForSelect() {
             option.textContent = catName;
             categorySelect.appendChild(option);
         });
-    } catch (error) {
-        console.error("Error loading categories for select:", error);
-    }
+    } catch (error) { console.error("Error loading categories for select:", error); }
 }
 
 async function checkIfChannelExists(channelId) {
@@ -163,9 +158,7 @@ async function checkIfChannelExists(channelId) {
         } else {
             existingCategoriesDisplay.innerHTML = `Channel not yet categorized.`;
         }
-    } catch (error) {
-        console.error("Error checking if channel exists:", error);
-    }
+    } catch (error) { console.error("Error checking if channel exists:", error); }
 }
 
 addChannelToCategoryButton.addEventListener('click', async () => {
@@ -174,30 +167,23 @@ addChannelToCategoryButton.addEventListener('click', async () => {
         infoMessage.className = 'error';
         return;
     }
-
     const selectedCategory = categorySelect.value;
     const newCategory = newCategoryNameInput.value.trim();
     let targetCategoryName = "";
-
-    if (newCategory) {
-        targetCategoryName = newCategory;
-    } else if (selectedCategory) {
-        targetCategoryName = selectedCategory;
-    } else {
+    if (newCategory) targetCategoryName = newCategory;
+    else if (selectedCategory) targetCategoryName = selectedCategory;
+    else {
         infoMessage.textContent = "Please select an existing category or enter a new one.";
         infoMessage.className = 'error';
         return;
     }
-
     infoMessage.textContent = `Adding ${currentChannelData.name} to ${targetCategoryName}...`;
     infoMessage.className = '';
-
     const channelDataToSend = {
         id: currentChannelData.id,
         name: currentChannelData.name,
         imageUrl: currentChannelData.imageUrl || 'icons/icon48.png'
     };
-
     try {
         const response = await browser.runtime.sendMessage({
             type: "ADD_CHANNEL_TO_CATEGORY",
@@ -227,7 +213,6 @@ viewCategoriesButton.addEventListener('click', () => {
     browser.runtime.openOptionsPage();
 });
 
-// --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
     await loadApiKey();
     await getCurrentTabInfo();

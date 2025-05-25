@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "YouTube Channel Categorizer",
-  "version": "1.1",
-  "description": "Categorize YouTube channels and view their recent videos.",
+  "name": "YouTube Channels Organizer",
+  "version": "1.1.0",
+  "description": "Organize your YouTube channels into categories, and view recent videos.",
   "permissions": [
     "storage",
     "activeTab",

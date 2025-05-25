@@ -1,16 +1,8 @@
-// --- Cache Configuration (same as Chrome version) ---
 const CACHE_CONFIG = {
-    CHANNEL_DETAILS: {
-        prefix: 'channel_detail_',
-        durationMs: 24 * 60 * 60 * 1000, // 24 hours
-    },
-    RECENT_VIDEOS: {
-        prefix: 'channel_videos_',
-        durationMs: 2 * 60 * 60 * 1000, // 2 hours
-    }
+    CHANNEL_DETAILS: { prefix: 'channel_detail_', durationMs: 24 * 60 * 60 * 1000 },
+    RECENT_VIDEOS: { prefix: 'channel_videos_', durationMs: 2 * 60 * 60 * 1000 }
 };
 
-// --- Helper Functions for Caching (using browser.storage.local) ---
 async function getCachedData(config, keySuffix) {
     const cacheKey = `${config.prefix}${keySuffix}`;
     const now = Date.now();
@@ -19,31 +11,22 @@ async function getCachedData(config, keySuffix) {
         if (cachedItem && cachedItem[cacheKey] && (now - cachedItem[cacheKey].timestamp < config.durationMs)) {
             return cachedItem[cacheKey].data;
         }
-    } catch (e) {
-        console.error("Error reading from cache:", e);
-    }
+    } catch (e) { console.error("Error reading from cache:", e); }
     return null;
 }
 
 async function setCachedData(config, keySuffix, data) {
     const cacheKey = `${config.prefix}${keySuffix}`;
     try {
-        await browser.storage.local.set({
-            [cacheKey]: { data: data, timestamp: Date.now() }
-        });
-    } catch (e) {
-        console.error("Error writing to cache:", e);
-    }
+        await browser.storage.local.set({ [cacheKey]: { data: data, timestamp: Date.now() } });
+    } catch (e) { console.error("Error writing to cache:", e); }
 }
 
 async function getApiKey() {
     try {
         const data = await browser.storage.sync.get('apiKey');
         return data.apiKey;
-    } catch (e) {
-        console.error("Error getting API key from storage:", e);
-        return null;
-    }
+    } catch (e) { console.error("Error getting API key:", e); return null; }
 }
 
 async function fetchYouTubeAPI(endpoint, params, useCacheConfig = null, cacheKeySuffix = null) {
@@ -51,26 +34,20 @@ async function fetchYouTubeAPI(endpoint, params, useCacheConfig = null, cacheKey
         const cached = await getCachedData(useCacheConfig, cacheKeySuffix);
         if (cached) return cached;
     }
-
     const apiKey = await getApiKey();
-    if (!apiKey) {
-        return { error: "API Key not set." };
-    }
+    if (!apiKey) return { error: "API Key not set." };
 
     const url = new URL(`https://www.googleapis.com/youtube/v3/${endpoint}`);
     url.searchParams.append('key', apiKey);
-    for (const key in params) {
-        url.searchParams.append(key, params[key]);
-    }
+    for (const key in params) url.searchParams.append(key, params[key]);
 
     try {
         const response = await fetch(url.toString());
-        if (!response.ok) {
-            const errorData = await response.json();
-            console.error("API Error:", endpoint, params, errorData);
-            return { error: `API Error: ${response.status} ${errorData.error?.message || response.statusText}` };
-        }
         const jsonData = await response.json();
+        if (!response.ok) {
+            console.error("API Error:", endpoint, params, jsonData);
+            return { error: `API Error: ${response.status} ${jsonData.error?.message || response.statusText}` };
+        }
         if (useCacheConfig && cacheKeySuffix && !jsonData.error) {
             await setCachedData(useCacheConfig, cacheKeySuffix, jsonData);
         }
@@ -85,51 +62,31 @@ function iso8601DurationToSeconds(duration) {
     if (!duration || typeof duration !== 'string') return 0;
     const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
     if (!match) return 0;
-    const hours = parseInt(match[1] || 0);
-    const minutes = parseInt(match[2] || 0);
-    const seconds = parseInt(match[3] || 0);
-    return hours * 3600 + minutes * 60 + seconds;
+    return (parseInt(match[1] || 0) * 3600) + (parseInt(match[2] || 0) * 60) + (parseInt(match[3] || 0));
 }
 
 browser.runtime.onMessage.addListener(async (request, sender) => {
-    // Note: In Firefox, the callback of onMessage.addListener can be an async function
-    // and it implicitly returns a Promise. No need to return true explicitly.
     if (request.type === "GET_CHANNEL_INFO") {
         const apiKey = await getApiKey();
-        if (!apiKey) {
-            return { error: "API Key not set in extension settings." };
-        }
-
+        if (!apiKey) return { error: "API Key not set." };
         const videoData = await fetchYouTubeAPI('videos', {
-            part: 'snippet',
-            id: request.videoId,
-            fields: 'items(snippet(channelId,channelTitle))'
+            part: 'snippet', id: request.videoId, fields: 'items(snippet(channelId,channelTitle))'
         });
-
-        if (videoData.error) {
-            return videoData;
-        }
-
+        if (videoData.error) return videoData;
         if (videoData.items && videoData.items.length > 0) {
-            const snippet = videoData.items[0].snippet;
-            const channelId = snippet.channelId;
-            const channelTitle = snippet.channelTitle;
-
+            const { channelId, channelTitle } = videoData.items[0].snippet;
             const channelDetails = await fetchYouTubeAPI('channels', {
-                part: 'snippet',
-                id: channelId,
-                fields: 'items(id,snippet(thumbnails(default(url))))'
+                part: 'snippet', id: channelId, fields: 'items(id,snippet(thumbnails(default(url))))'
             }, CACHE_CONFIG.CHANNEL_DETAILS, channelId);
-
             let channelImageUrl = 'icons/icon48.png';
             if (channelDetails && channelDetails.items && channelDetails.items.length > 0) {
                 channelImageUrl = channelDetails.items[0].snippet.thumbnails.default.url;
-            } else if (channelDetails && channelDetails.error) {
+            } else if (channelDetails?.error) {
                 console.warn(`Could not fetch/cache channel details for ${channelId}: ${channelDetails.error}`);
             }
             return { channelId, channelTitle, channelImageUrl };
         } else {
-            return { error: "Video not found or no channel info from video." };
+            return { error: "Video not found or no channel info." };
         }
     }
     else if (request.type === "ADD_CHANNEL_TO_CATEGORY") {
@@ -138,31 +95,31 @@ browser.runtime.onMessage.addListener(async (request, sender) => {
             return { success: false, error: "Missing channel data or category name." };
         }
         try {
-            const data = await browser.storage.sync.get('categories');
-            let categories = data.categories || {};
-            if (!categories[categoryName]) {
-                categories[categoryName] = [];
-            }
+            const storageData = await browser.storage.sync.get(['categories', 'categoryOrder']);
+            let categories = storageData.categories || {};
+            let categoryOrder = storageData.categoryOrder || [];
+            let isNewCategory = !categories[categoryName];
 
+            if (!categories[categoryName]) categories[categoryName] = [];
             const existingChannelIndex = categories[categoryName].findIndex(ch => ch.id === channel.id);
-            if (existingChannelIndex > -1) {
-                categories[categoryName][existingChannelIndex] = channel;
-            } else {
-                categories[categoryName].push(channel);
+            if (existingChannelIndex > -1) categories[categoryName][existingChannelIndex] = channel;
+            else categories[categoryName].push(channel);
+            
+            const dataToSet = { categories };
+            if (isNewCategory && !categoryOrder.includes(categoryName)) {
+                categoryOrder.push(categoryName);
+                dataToSet.categoryOrder = categoryOrder;
             }
-            await browser.storage.sync.set({ categories });
+            await browser.storage.sync.set(dataToSet);
             return { success: true };
         } catch (error) {
-            console.error("Error adding channel to category in storage:", error);
+            console.error("Error in ADD_CHANNEL_TO_CATEGORY:", error);
             return { success: false, error: error.message };
         }
     }
     else if (request.type === "GET_RECENT_VIDEOS") {
         const apiKey = await getApiKey();
-        if (!apiKey) {
-            return { videos: [], error: "API Key not set." };
-        }
-
+        if (!apiKey) return { videos: [], error: "API Key not set." };
         const allFetchedVideos = [];
         const VIDEOS_TO_FETCH_PER_CHANNEL = 15;
         const VIDEOS_TO_RETURN = 5;
@@ -174,29 +131,18 @@ browser.runtime.onMessage.addListener(async (request, sender) => {
                 allFetchedVideos.push(...cachedChannelVideos);
                 continue;
             }
-
             const searchData = await fetchYouTubeAPI('search', {
-                part: 'snippet',
-                channelId: channelId,
-                maxResults: VIDEOS_TO_FETCH_PER_CHANNEL,
-                order: 'date',
-                type: 'video',
+                part: 'snippet', channelId: channelId, maxResults: VIDEOS_TO_FETCH_PER_CHANNEL,
+                order: 'date', type: 'video',
                 fields: 'items(id(videoId),snippet(publishedAt,channelId,title,channelTitle,thumbnails(medium(url))))'
             });
-
-            if (searchData.error) {
-                console.error(`Error fetching videos for ${channelId}: ${searchData.error}`);
-                continue;
-            }
-
+            if (searchData.error) { console.error(`Error searching videos for ${channelId}: ${searchData.error}`); continue; }
             if (searchData.items && searchData.items.length > 0) {
                 const videoIds = searchData.items.map(item => item.id.videoId).join(',');
                 const videosDetailsData = await fetchYouTubeAPI('videos', {
-                    part: 'contentDetails,snippet',
-                    id: videoIds,
+                    part: 'contentDetails,snippet', id: videoIds,
                     fields: 'items(id,snippet(title,channelTitle,channelId,publishedAt,thumbnails(medium(url))),contentDetails(duration))'
                 });
-
                 let processedChannelVideos = [];
                 if (videosDetailsData.items) {
                     const videoMap = new Map(searchData.items.map(item => [item.id.videoId, item.snippet]));
@@ -206,8 +152,7 @@ browser.runtime.onMessage.addListener(async (request, sender) => {
                             const originalSnippet = videoMap.get(videoDetail.id);
                             if (originalSnippet) {
                                 processedChannelVideos.push({
-                                    id: videoDetail.id,
-                                    title: originalSnippet.title,
+                                    id: videoDetail.id, title: originalSnippet.title,
                                     thumbnail: originalSnippet.thumbnails.medium.url,
                                     channelName: originalSnippet.channelTitle,
                                     publishedAt: originalSnippet.publishedAt,
@@ -227,13 +172,9 @@ browser.runtime.onMessage.addListener(async (request, sender) => {
         allFetchedVideos.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
         return { videos: allFetchedVideos };
     }
-    // If the message type is not handled, the promise will resolve to undefined.
-    // This is usually fine unless the sender expects a specific response for unhandled types.
 });
 
-// --- Cache Cleanup Alarm (using browser.alarms) ---
 browser.alarms.create('cacheCleanup', { periodInMinutes: 1440 });
-
 browser.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === 'cacheCleanup') {
         try {
@@ -243,10 +184,8 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
             for (const key in allStorage) {
                 if (key.startsWith(CACHE_CONFIG.CHANNEL_DETAILS.prefix) || key.startsWith(CACHE_CONFIG.RECENT_VIDEOS.prefix)) {
                     const item = allStorage[key];
-                    let duration = 0;
-                    if (key.startsWith(CACHE_CONFIG.CHANNEL_DETAILS.prefix)) duration = CACHE_CONFIG.CHANNEL_DETAILS.durationMs;
-                    if (key.startsWith(CACHE_CONFIG.RECENT_VIDEOS.prefix)) duration = CACHE_CONFIG.RECENT_VIDEOS.durationMs;
-
+                    let duration = key.startsWith(CACHE_CONFIG.CHANNEL_DETAILS.prefix) ?
+                                   CACHE_CONFIG.CHANNEL_DETAILS.durationMs : CACHE_CONFIG.RECENT_VIDEOS.durationMs;
                     if (item && item.timestamp && (now - item.timestamp > duration)) {
                         keysToRemove.push(key);
                     }
@@ -255,8 +194,6 @@ browser.alarms.onAlarm.addListener(async (alarm) => {
             if (keysToRemove.length > 0) {
                 await browser.storage.local.remove(keysToRemove);
             }
-        } catch (e) {
-            console.error("Error during cache cleanup:", e);
-        }
+        } catch (e) { console.error("Error during cache cleanup:", e); }
     }
 });
