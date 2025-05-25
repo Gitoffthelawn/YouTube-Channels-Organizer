@@ -32,7 +32,7 @@ Google provides 10k daily queries. The queries include fetching channel names, c
 3. Click on "Load unpacked" and upload the downloaded folder
 
 ### Firefox-based browsers
-> FF users can install the extension from here: https://addons.mozilla.org/en-US/firefox/addon/youtube-channels-organizer/
+> FF users can install the extension from [here](https://addons.mozilla.org/en-US/firefox/addon/youtube-channels-organizer)
 1. Type `about:config` in the address bar and press Enter. Click on "Accept Risk and continue".
 2. Search for `xpinstall.signatures.required` and set it to "False" by dounle-clicking on the row
 3. Open Add-ons Manager page `about:addons`
