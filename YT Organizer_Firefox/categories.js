@@ -217,13 +217,14 @@ function handleTabOverflow() {
         tabsWidth += container.offsetWidth + parseInt(getComputedStyle(container).marginLeft || 0) + parseInt(getComputedStyle(container).marginRight || 0);
         container.style.display = prevDisplay;
     });
-    if (tabsWidth > containerWidth - 10 && tabButtonContainers.length > 1) {
-        categoryTabsDiv.style.display = 'none'; categoryDropdown.style.display = 'block';
-        if (currentCategoryName && categoryOrder.includes(currentCategoryName)) categoryDropdown.value = currentCategoryName;
-        else if (categoryOrder.length > 0) categoryDropdown.value = categoryOrder[0];
-    } else {
-        categoryTabsDiv.style.display = 'flex'; categoryDropdown.style.display = 'none';
-    }
+     // removed dropdown logic for now, as it was not working as expected
+    // if (tabsWidth > containerWidth - 10 && tabButtonContainers.length > 1) {
+    //     categoryTabsDiv.style.display = 'none'; categoryDropdown.style.display = 'block';
+    //     if (currentCategoryName && categoryOrder.includes(currentCategoryName)) categoryDropdown.value = currentCategoryName;
+    //     else if (categoryOrder.length > 0) categoryDropdown.value = categoryOrder[0];
+    // } else {
+    //     categoryTabsDiv.style.display = 'flex'; categoryDropdown.style.display = 'none';
+    // }
 }
 
 // --- Content Rendering (Channels, Videos) ---
