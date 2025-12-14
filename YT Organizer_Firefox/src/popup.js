@@ -82,6 +82,18 @@ async function detectChannelFromTab() {
     // ignore
   }
 
+  try {
+    const res = await api.runtime.sendMessage({ type: "RESOLVE_CHANNEL_FROM_URL", url: tab.url });
+    if (res?.channel) {
+      currentTabChannel = res.channel;
+      statusMsg(`Detected: ${res.channel.title}`);
+      await showChannelMembership();
+      return;
+    }
+  } catch (err) {
+    // ignore
+  }
+
   statusMsg("No creator detected on this tab.");
 }
 

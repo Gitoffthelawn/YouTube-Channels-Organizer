@@ -219,6 +219,54 @@ function validateImportedState(raw) {
   return { categories: { ...categories }, channels: { ...channels }, videoCache: {} };
 }
 
+async function resolveChannelFromUrl(url) {
+  try {
+    const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+    if (oembed.ok) {
+      const data = await oembed.json();
+      const authorUrl = data.author_url || "";
+      const authorName = data.author_name || "";
+      const channelId =
+        authorUrl.match(/channel\/([^/]+)/)?.[1] ||
+        authorUrl.match(/user\/([^/]+)/)?.[1] ||
+        authorUrl.match(/c\/([^/]+)/)?.[1];
+      if (channelId) {
+        return {
+          channelId,
+          title: authorName || "YouTube Creator",
+          url: authorUrl || `https://www.youtube.com/channel/${channelId}`
+        };
+      }
+    }
+  } catch (err) {
+    // continue to fallback
+  }
+
+  try {
+    const res = await fetch(url, { credentials: "omit" });
+    if (res.ok) {
+      const html = await res.text();
+      const channelId = html.match(/"channelId":"(UC[^"]+)"/)?.[1];
+      const channelName =
+        html.match(/"channelName":"([^"]+)"/)?.[1] ||
+        html.match(/"ownerChannelName":"([^"]+)"/)?.[1] ||
+        html.match(/<meta itemprop="name" content="([^"]+)"/)?.[1] ||
+        "YouTube Creator";
+      if (channelId) {
+        return {
+          channelId,
+          title: channelName,
+          url: `https://www.youtube.com/channel/${channelId}`
+        };
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  return null;
+}
+
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message.type === "SAVE_CREATOR") {
@@ -259,6 +307,12 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       await saveState(validated);
       sendResponse({ ok: true });
+      return;
+    }
+
+    if (message.type === "RESOLVE_CHANNEL_FROM_URL") {
+      const channel = await resolveChannelFromUrl(message.url);
+      sendResponse({ channel });
       return;
     }
 

@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "name": "YouTube Organizer (RSS) Firefox",
+  "name": "YouTube Organizer",
   "version": "2.0.0",
   "description": "Organize YouTube creators into categories and view latest videos via RSS.",
   "permissions": [
