@@ -1,32 +1,49 @@
 {
+  "name": "YouTube Organizer (RSS)",
+  "description": "Organize YouTube creators into categories and browse latest videos via RSS.",
+  "version": "2.0.0",
   "manifest_version": 3,
-  "name": "YouTube Channels Organizer",
-  "version": "1.2.1",
-  "description": "Organize your YouTube channels into categories, and view recent videos.",
   "permissions": [
     "storage",
     "activeTab",
-    "scripting",
-    "alarms"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
-    "https://www.googleapis.com/"
+    "https://www.youtube.com/*",
+    "https://*.youtube.com/*"
   ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
   "action": {
-    "default_popup": "popup.html",
+    "default_title": "YT Organizer",
+    "default_popup": "src/popup.html",
     "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "16": "src/icons/icon16.png",
+      "48": "src/icons/icon48.png",
+      "128": "src/icons/icon128.png"
     }
   },
-  "background": {
-    "service_worker": "background.js"
-  },
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "src/icons/icon16.png",
+    "48": "src/icons/icon48.png",
+    "128": "src/icons/icon128.png"
   },
-  "options_page": "categories.html"
+  "options_page": "src/options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/watch*"
+      ],
+      "js": [
+        "src/contentScript.js"
+      ],
+      "css": [
+        "src/contentStyles.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

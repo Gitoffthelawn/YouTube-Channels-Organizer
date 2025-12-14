@@ -1,0 +1,99 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f0f0f;
+  color: #f5f5f5;
+  padding: 16px;
+}
+
+header h1 {
+  margin: 0 0 4px 0;
+}
+
+header p {
+  margin: 0 0 16px 0;
+  color: #b5b5b5;
+}
+
+.panel {
+  background: #161616;
+  border: 1px solid #1f1f1f;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+}
+
+input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #303030;
+  border-radius: 4px;
+  background: #1f1f1f;
+  color: #fff;
+}
+
+button {
+  background: #77BBC4;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #2f2f2f;
+}
+
+.status {
+  font-size: 12px;
+  margin-top: 8px;
+  color: #b5b5b5;
+}
+
+.category {
+  padding: 10px;
+  border-bottom: 1px solid #1f1f1f;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.category-actions button {
+  margin-left: 6px;
+}
+
+.creator {
+  margin-left: 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.creator a {
+  color: #77BBC4;
+  text-decoration: none;
+}
+
+.creator a:hover {
+  text-decoration: underline;
+}
+
+.empty {
+  color: #9b9b9b;
+  font-size: 13px;
+}

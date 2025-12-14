@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>YT Organizer</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <div class="title">YT Organizer (RSS)</div>
+      <div class="header-actions">
+        <button id="library-btn" title="Open library page">Library</button>
+      </div>
+    </header>
+    <section class="panel" id="save-panel">
+      <div class="panel-title">Save creator from current tab</div>
+      <div id="current-channel">Loading tab info…</div>
+      <div class="save-row">
+        <div class="field">
+          <label for="popup-category-select">Select category</label>
+          <select id="popup-category-select"></select>
+        </div>
+        <div class="field">
+          <label for="popup-category-input">Or create new</label>
+          <input id="popup-category-input" placeholder="Enter new category name" />
+        </div>
+        <button id="popup-save-btn">Save</button>
+      </div>
+      <div id="save-status" class="status"></div>
+    </section>
+    <script src="popup.js"></script>
+  </body>
+</html>

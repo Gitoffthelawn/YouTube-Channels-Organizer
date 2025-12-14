@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>YT Organizer Library</title>
+    <link rel="stylesheet" href="library.css" />
+  </head>
+  <body>
+    <header>
+      <img src="icons/icon16.png" alt="YT Organizer" class="logo" />
+      <div class="title">YT Organizer Library</div>
+      <button id="refresh-btn">Refresh</button>
+    </header>
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="videos">Videos</button>
+      <button class="mode-btn" data-mode="creators">Manage</button>
+    </div>
+
+    <section id="videos-view">
+      <div class="content">
+        <div class="videos-column">
+          <div class="tabs-wrapper">
+            <button class="tabs-nav" id="tabs-prev" aria-label="Previous categories"><</button>
+            <div id="tabs" class="tabs"></div>
+            <button class="tabs-nav" id="tabs-next" aria-label="Next categories">></button>
+          </div>
+          <div id="videos" class="videos"></div>
+          <div id="empty" class="empty">No categories yet. Save a creator to get started.</div>
+        </div>
+        <aside id="player-panel" class="player hidden">
+          <div class="player-header">
+            <div class="player-meta">
+              <div id="player-title" class="player-title">Select a video</div>
+              <div id="player-channel" class="player-channel"></div>
+            </div>
+            <button id="player-close" aria-label="Close player">×</button>
+          </div>
+          <div class="player-frame">
+            <iframe id="player-iframe" src="" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+            <div id="player-fallback" class="player-fallback hidden">
+              <button id="fallback-open">Open in YouTube</button>
+              <div class="fallback-text">This video can't play here. We'll open it on YouTube.</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <section id="creators-view" class="hidden">
+      <div class="creator-panel">
+        <h2>Categories & Creators</h2>
+        <div class="add-row">
+          <input id="new-category-name" placeholder="Category name" />
+          <button id="add-category-btn">Add</button>
+        </div>
+        <div id="add-status" class="status"></div>
+        <div class="import-export">
+          <button id="export-btn">Export</button>
+          <label class="import-label">
+            Import
+            <input type="file" id="import-file" accept=".json,application/json" />
+          </label>
+          <div id="import-status" class="status"></div>
+        </div>
+      </div>
+      <div id="categories" class="creator-list"></div>
+    </section>
+
+    <script src="library.js"></script>
+  </body>
+</html>
