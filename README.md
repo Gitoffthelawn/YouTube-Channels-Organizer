@@ -5,7 +5,7 @@ A simple extension for Chromium and Firefox-based browsers to organize your favo
 I created this extension because I wanted to view view latest videos of my fav creators in one place without having to go to each's profile or subscribe them. 
 
 #### Notes and features:
-- It fetches the latest 5 videos of each creator and shows them.
+- It fetches the latest 5 videos of each creator and shows them chronologically.
 - It uses YT RSS to fetch the videos so might be slow and not updated.
 - Since YT restricted the embed video being played (especially from extension), the video now opens in the new tab instead of the same tab.
 - You can edit/delete/order categories you created or remove the channels from the category. 
@@ -18,14 +18,9 @@ I created this extension because I wanted to view view latest videos of my fav c
 ## Installation guidelines
 
 ### Chromium-based browsers
-1. Go to the Extension page `chrome:extensions`
-2. Enable "Developer mode"
-3. Click on "Load unpacked" and upload the downloaded folder
+> Install the extenstion from the [Chrome Web Store](https://chromewebstore.google.com/detail/youtube-organizer-rss/jhcemfdejnfmocheecgbbanhoocbcjkg).
 
 ### Firefox-based browsers
-> FF users can install the extension from [here](https://addons.mozilla.org/en-US/firefox/addon/youtube-channels-organizer) or if you want to install manually:
-1. Type `about:config` in the address bar and press Enter. Click on "Accept Risk and continue".
-2. Search for `xpinstall.signatures.required` and set it to "False" by dounle-clicking on the row
-3. Open Add-ons Manager page `about:addons`
-4. From gear icon, select "Install add-on from file" and select the downloaded xpi file.
+> Install from [Addons Page](https://addons.mozilla.org/en-US/firefox/addon/youtube-channels-organizer).
+
 
