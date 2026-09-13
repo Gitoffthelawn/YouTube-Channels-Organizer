@@ -1,18 +1,26 @@
 const api = typeof browser !== "undefined" ? browser : chrome;
 const STATE_KEY = "ytOrganizerState";
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const VIDEOS_PER_CHANNEL = 15; // RSS feed max, fetched raw so Shorts can be filtered out
+const RESULT_PER_CHANNEL = 5; // non-Short videos surfaced per channel
+const FEATURED_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 const emptyState = () => ({
   categories: {},
   channels: {},
-  videoCache: {}
+  videoCache: {},
+  shortsCache: {},
+  featuredCache: {}
 });
 
 const normalizeName = (name) => name.trim().toLowerCase();
 
 async function getState() {
   const stored = await api.storage.local.get(STATE_KEY);
-  return stored[STATE_KEY] || emptyState();
+  const state = stored[STATE_KEY] || emptyState();
+  state.shortsCache ||= {};
+  state.featuredCache ||= {};
+  return state;
 }
 
 async function saveState(state) {
@@ -21,7 +29,9 @@ async function saveState(state) {
 
 function findCategoryByName(state, name) {
   const target = normalizeName(name);
-  return Object.values(state.categories).find((cat) => normalizeName(cat.name) === target);
+  return Object.values(state.categories).find(
+    (cat) => normalizeName(cat.name) === target
+  );
 }
 
 function ensureCategory(state, name) {
@@ -66,7 +76,17 @@ function detachChannelFromCategory(state, channelId, categoryId) {
   if (!category || !channel) return state;
   category.channelIds = category.channelIds.filter((id) => id !== channelId);
   channel.categories = channel.categories.filter((id) => id !== categoryId);
+  gcOrphanedChannel(state, channelId);
   return state;
+}
+
+// Removes a channel (and its cached data) once it belongs to no category.
+function gcOrphanedChannel(state, channelId) {
+  const channel = state.channels[channelId];
+  if (!channel || channel.categories.length) return;
+  delete state.channels[channelId];
+  delete state.videoCache[channelId];
+  delete state.featuredCache[channelId];
 }
 
 async function handleSaveCreator(message) {
@@ -98,22 +118,69 @@ async function getChannelStatus(channelId) {
   return { categories };
 }
 
-function parseRss(xmlText) {
+function parseRssWithDom(xmlText) {
   try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(xmlText, "application/xml");
+    if (typeof DOMParser === "undefined") return null;
+    const doc = new DOMParser().parseFromString(xmlText, "application/xml");
     const entries = Array.from(doc.querySelectorAll("entry"));
     return entries.map((entry) => {
       const videoId = entry.querySelector("yt\\:videoId, videoId")?.textContent || "";
       const title = entry.querySelector("title")?.textContent || "Untitled";
       const link = entry.querySelector("link[rel='alternate']")?.getAttribute("href") || `https://www.youtube.com/watch?v=${videoId}`;
       const publishedAt = entry.querySelector("published")?.textContent || new Date().toISOString();
-      const thumbnail = entry.querySelector("media\\:thumbnail")?.getAttribute("url") || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-      return { videoId, title, url: link, publishedAt, thumbnail };
+      const thumbnail =
+        entry.querySelector("media\\:thumbnail")?.getAttribute("url") ||
+        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+      const description = entry.querySelector("media\\:description")?.textContent || "";
+      const viewCount = Number(entry.querySelector("media\\:statistics")?.getAttribute("views") || 0);
+      return { videoId, title, url: link, publishedAt, thumbnail, description, viewCount };
     });
   } catch (err) {
-    return [];
+    return null;
   }
+}
+
+function parseRssFallback(xmlText) {
+  const items = [];
+  const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
+  let match;
+  while ((match = entryRegex.exec(xmlText)) && items.length < VIDEOS_PER_CHANNEL) {
+    const block = match[1];
+    const videoId = (block.match(/<yt:videoId>(.*?)<\/yt:videoId>/) || [])[1] || "";
+    const title = (block.match(/<title>(<!\[CDATA\[)?([\s\S]*?)(\]\]>)?<\/title>/) || [])[2]?.trim() || "Untitled";
+    const link = (block.match(/<link rel="alternate" href="(.*?)"/) || [])[1] || `https://www.youtube.com/watch?v=${videoId}`;
+    const publishedAt = (block.match(/<published>(.*?)<\/published>/) || [])[1] || new Date().toISOString();
+    const thumbnail =
+      (block.match(/<media:thumbnail url="(.*?)"/) || [])[1] ||
+      `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    const description = (block.match(/<media:description>([\s\S]*?)<\/media:description>/) || [])[1] || "";
+    const viewCount = Number((block.match(/<media:statistics views="(\d+)"/) || [])[1] || 0);
+    items.push({ videoId, title, url: link, publishedAt, thumbnail, description, viewCount });
+  }
+  return items;
+}
+
+// No official "is this a Short" flag exists in the RSS feed. YouTube redirects
+// /shorts/{id} requests to /watch?v={id} for anything that isn't actually a
+// Short, so the final response URL tells us which bucket a video is in.
+async function probeIsShort(videoId) {
+  try {
+    const res = await fetch(`https://www.youtube.com/shorts/${videoId}`, { redirect: "follow", cache: "no-store" });
+    return res.url.includes("/shorts/");
+  } catch (err) {
+    return false;
+  }
+}
+
+async function annotateShorts(state, videos) {
+  const unknown = videos.filter((v) => v.videoId && state.shortsCache[v.videoId] === undefined);
+  if (unknown.length) {
+    const results = await Promise.allSettled(unknown.map((v) => probeIsShort(v.videoId)));
+    unknown.forEach((v, i) => {
+      state.shortsCache[v.videoId] = results[i].status === "fulfilled" ? results[i].value : false;
+    });
+  }
+  return videos.map((v) => ({ ...v, isShort: Boolean(state.shortsCache[v.videoId]) }));
 }
 
 async function fetchChannelFeed(channelId) {
@@ -121,45 +188,50 @@ async function fetchChannelFeed(channelId) {
   const res = await fetch(feedUrl, { cache: "no-store" });
   if (!res.ok) throw new Error(`Feed request failed ${res.status}`);
   const xml = await res.text();
-  const parsed = parseRss(xml) || [];
-  return parsed.slice(0, 5);
+  const parsed =
+    parseRssWithDom(xml)?.filter(Boolean) ||
+    parseRssFallback(xml);
+  return parsed.slice(0, VIDEOS_PER_CHANNEL);
 }
 
 async function loadVideosForCategory(categoryId) {
   const state = await getState();
   const category = state.categories[categoryId];
-  if (!category) return { videos: [], error: "Category not found" };
-  const aggregate = [];
+  if (!category) return { videos: [], errors: [{ error: "Category not found" }] };
 
-  for (const channelId of category.channelIds) {
-    const channel = state.channels[channelId];
-    if (!channel) continue;
+  const errors = [];
 
-    const cached = state.videoCache[channelId];
-    const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
-    let videos = cached?.videos || [];
+  const perChannel = await Promise.allSettled(
+    category.channelIds.map(async (channelId) => {
+      const channel = state.channels[channelId];
+      if (!channel) return [];
 
-    if (!isFresh) {
-      try {
-        videos = await fetchChannelFeed(channelId);
-        state.videoCache[channelId] = { fetchedAt: Date.now(), videos };
-      } catch (err) {
-        console.warn("RSS fetch failed", channelId, err);
+      const cached = state.videoCache[channelId];
+      const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
+      let videos = cached?.videos || [];
+
+      if (!isFresh) {
+        try {
+          videos = await fetchChannelFeed(channelId);
+          state.videoCache[channelId] = { fetchedAt: Date.now(), videos };
+        } catch (err) {
+          errors.push({ channelId, channelTitle: channel.title, error: String(err.message || err) });
+          console.warn("RSS fetch failed", channelId, err);
+        }
       }
-    }
 
-    for (const video of videos.slice(0, 5)) {
-      aggregate.push({
-        ...video,
-        channelId,
-        channelTitle: channel.title
-      });
-    }
-  }
+      const annotated = await annotateShorts(state, videos);
+      const nonShorts = annotated.filter((v) => !v.isShort).slice(0, RESULT_PER_CHANNEL);
+      return nonShorts.map((video) => ({ ...video, channelId, channelTitle: channel.title }));
+    })
+  );
+
+  const aggregate = perChannel.flatMap((r) => (r.status === "fulfilled" ? r.value : []));
 
   await saveState(state);
+
   aggregate.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
-  return { videos: aggregate };
+  return { videos: aggregate, errors };
 }
 
 async function handleOptionsAction(message) {
@@ -183,7 +255,7 @@ async function handleOptionsAction(message) {
   if (message.type === "DELETE_CATEGORY") {
     const category = state.categories[message.categoryId];
     if (category) {
-      for (const channelId of category.channelIds) {
+      for (const channelId of [...category.channelIds]) {
         detachChannelFromCategory(state, channelId, category.id);
       }
       delete state.categories[message.categoryId];
@@ -211,15 +283,8 @@ async function handleOptionsAction(message) {
   return { state: updated ? state : undefined };
 }
 
-function validateImportedState(raw) {
-  if (!raw || typeof raw !== "object") return null;
-  const { categories, channels } = raw;
-  if (!categories || typeof categories !== "object") return null;
-  if (!channels || typeof channels !== "object") return null;
-  return { categories: { ...categories }, channels: { ...channels }, videoCache: {} };
-}
-
 async function resolveChannelFromUrl(url) {
+  // Try oEmbed first for channel name and URL.
   try {
     const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
     if (oembed.ok) {
@@ -231,17 +296,19 @@ async function resolveChannelFromUrl(url) {
         authorUrl.match(/user\/([^/]+)/)?.[1] ||
         authorUrl.match(/c\/([^/]+)/)?.[1];
       if (channelId) {
+        const normalizedId = channelId;
         return {
-          channelId,
+          channelId: normalizedId,
           title: authorName || "YouTube Creator",
-          url: authorUrl || `https://www.youtube.com/channel/${channelId}`
+          url: authorUrl || `https://www.youtube.com/channel/${normalizedId}`
         };
       }
     }
   } catch (err) {
-    // continue to fallback
+    // ignore and try page scrape
   }
 
+  // Fallback: fetch the page and extract channelId from HTML.
   try {
     const res = await fetch(url, { credentials: "omit" });
     if (res.ok) {
@@ -267,10 +334,86 @@ async function resolveChannelFromUrl(url) {
   return null;
 }
 
+async function refreshChannelTitle(channelId) {
+  try {
+    const feedUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`;
+    const res = await fetch(feedUrl, { cache: "no-store" });
+    if (!res.ok) return null;
+    const xml = await res.text();
+    const nameMatch = xml.match(/<name>(<!\[CDATA\[)?([\s\S]*?)(\]\]>|)<\/name>/);
+    const name = nameMatch?.[2]?.trim();
+    if (!name) return null;
+    const state = await getState();
+    if (!state.channels[channelId]) return null;
+    state.channels[channelId].title = name;
+    await saveState(state);
+    return state.channels[channelId];
+  } catch (err) {
+    return null;
+  }
+}
+
+// Scrapes a channel's self-curated "Featured channels" shelf. YouTube has no
+// API for algorithmic "similar channels" (relatedToVideoId was deprecated),
+// so this only surfaces channels the creator themselves chose to cross-link.
+function parseFeaturedChannels(html, excludeChannelId) {
+  const seen = new Map();
+  const rendererRegex = /"channelRenderer":\{"channelId":"(UC[\w-]{10,})"[\s\S]{0,600}?"title":\{"simpleText":"([^"]+)"/g;
+  let match;
+  while ((match = rendererRegex.exec(html))) {
+    const [, channelId, title] = match;
+    if (channelId === excludeChannelId || seen.has(channelId)) continue;
+    seen.set(channelId, {
+      channelId,
+      title: title.replace(/\\u0026/g, "&"),
+      url: `https://www.youtube.com/channel/${channelId}`
+    });
+  }
+  return Array.from(seen.values());
+}
+
+async function getFeaturedChannels(channelId) {
+  const state = await getState();
+  const cached = state.featuredCache[channelId];
+  if (cached && Date.now() - cached.fetchedAt < FEATURED_TTL_MS) {
+    return { channels: cached.channels };
+  }
+
+  try {
+    const res = await fetch(`https://www.youtube.com/channel/${encodeURIComponent(channelId)}/channels`, {
+      credentials: "omit"
+    });
+    if (!res.ok) return { channels: cached?.channels || [] };
+    const html = await res.text();
+    const channels = parseFeaturedChannels(html, channelId);
+    state.featuredCache[channelId] = { fetchedAt: Date.now(), channels };
+    await saveState(state);
+    return { channels };
+  } catch (err) {
+    return { channels: cached?.channels || [], error: String(err.message || err) };
+  }
+}
+
+function validateImportedState(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const { categories, channels, videoCache } = raw;
+  if (!categories || typeof categories !== "object") return null;
+  if (!channels || typeof channels !== "object") return null;
+  // shallow clone
+  return {
+    categories: { ...categories },
+    channels: { ...channels },
+    videoCache: videoCache && typeof videoCache === "object" ? { ...videoCache } : {},
+    shortsCache: {},
+    featuredCache: {}
+  };
+}
+
 api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     if (message.type === "SAVE_CREATOR") {
-      sendResponse(await handleSaveCreator(message));
+      const result = await handleSaveCreator(message);
+      sendResponse(result);
       return;
     }
 
@@ -299,6 +442,23 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
 
+    if (message.type === "RESOLVE_CHANNEL_FROM_URL") {
+      const channel = await resolveChannelFromUrl(message.url);
+      sendResponse({ channel });
+      return;
+    }
+
+    if (message.type === "REFRESH_CHANNEL_TITLE") {
+      const channel = await refreshChannelTitle(message.channelId);
+      sendResponse({ channel });
+      return;
+    }
+
+    if (message.type === "GET_FEATURED_CHANNELS") {
+      sendResponse(await getFeaturedChannels(message.channelId));
+      return;
+    }
+
     if (message.type === "IMPORT_STATE") {
       const validated = validateImportedState(message.state);
       if (!validated) {
@@ -307,12 +467,6 @@ api.runtime.onMessage.addListener((message, sender, sendResponse) => {
       }
       await saveState(validated);
       sendResponse({ ok: true });
-      return;
-    }
-
-    if (message.type === "RESOLVE_CHANNEL_FROM_URL") {
-      const channel = await resolveChannelFromUrl(message.url);
-      sendResponse({ channel });
       return;
     }
 

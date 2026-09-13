@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "YouTube Organizer",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Organize YouTube creators into categories and view latest videos via RSS.",
   "permissions": [
     "storage",
@@ -40,7 +40,13 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/watch*"],
+      "matches": [
+        "https://www.youtube.com/watch*",
+        "https://www.youtube.com/channel/*",
+        "https://www.youtube.com/c/*",
+        "https://www.youtube.com/user/*",
+        "https://www.youtube.com/@*"
+      ],
       "js": ["src/contentScript.js"],
       "css": ["src/contentStyles.css"],
       "run_at": "document_idle"

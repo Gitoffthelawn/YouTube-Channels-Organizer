@@ -2,20 +2,15 @@
 
 ## Supported Versions
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Only the latest released version of the Chromium and Firefox builds is supported with fixes.
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| 3.0.x   | :white_check_mark: |
+| < 3.0   | :x:                |
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
+This extension only talks to `youtube.com` (RSS feeds, oEmbed, and page scraping to resolve channel info) and stores your categories/channels locally via the browser's extension storage - it does not run its own backend or collect data.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+If you find a security issue (e.g. an XSS vector in rendered channel/video data, or unsafe use of extension permissions), please open an issue in this repository describing the problem and steps to reproduce. Avoid filing public issues for anything actively exploitable; mention that in the issue title and a maintainer will follow up privately.

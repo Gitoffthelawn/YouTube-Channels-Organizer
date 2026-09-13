@@ -1,7 +1,7 @@
 {
   "name": "YouTube Organizer (RSS)",
   "description": "Organize YouTube creators into categories and browse latest videos via RSS.",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "manifest_version": 3,
   "permissions": [
     "storage",
@@ -31,11 +31,18 @@
     "48": "src/icons/icon48.png",
     "128": "src/icons/icon128.png"
   },
-  "options_page": "src/options.html",
+  "options_ui": {
+    "page": "src/library.html",
+    "open_in_tab": true
+  },
   "content_scripts": [
     {
       "matches": [
-        "https://www.youtube.com/watch*"
+        "https://www.youtube.com/watch*",
+        "https://www.youtube.com/channel/*",
+        "https://www.youtube.com/c/*",
+        "https://www.youtube.com/user/*",
+        "https://www.youtube.com/@*"
       ],
       "js": [
         "src/contentScript.js"

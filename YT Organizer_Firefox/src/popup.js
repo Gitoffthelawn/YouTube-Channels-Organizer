@@ -40,13 +40,13 @@ async function detectChannelFromTab() {
     return;
   }
   const isYouTube = tab.url && tab.url.includes("youtube.com");
-  const isWatch = tab.url && tab.url.includes("youtube.com/watch");
+  const isDetectablePage = tab.url && /youtube\.com\/(watch|channel\/|c\/|user\/|@)/.test(tab.url);
   if (!isYouTube) {
     statusMsg("Not a YouTube page.");
     return;
   }
-  if (!isWatch) {
-    statusMsg("Open a YouTube watch page to save the creator.");
+  if (!isDetectablePage) {
+    statusMsg("Open a video or channel page to save the creator.");
     return;
   }
 
@@ -65,9 +65,22 @@ async function detectChannelFromTab() {
   try {
     const [{ result }] = await api.tabs.executeScript(tab.id, {
       code: `(() => {
-        const channelId = document.querySelector('meta[itemprop="channelId"]')?.getAttribute('content') || '';
-        const title = document.querySelector('#owner #channel-name a')?.textContent?.trim() || document.querySelector('ytd-channel-name #container')?.textContent?.trim() || document.querySelector('meta[itemprop="name"]')?.getAttribute('content') || '';
-        const url = document.querySelector('#owner #channel-name a')?.href || (channelId ? 'https://www.youtube.com/channel/' + channelId : '');
+        const findChannelId = () => {
+          const canonicalId = document.querySelector('link[rel="canonical"]')?.href?.match(/channel\\/(UC[\\w-]+)/)?.[1];
+          if (canonicalId) return canonicalId;
+          const metaId = document.querySelector('meta[itemprop="channelId"]')?.getAttribute('content');
+          if (metaId) return metaId;
+          for (const script of document.querySelectorAll('script')) {
+            const text = script.textContent;
+            if (!text || !text.includes('channelId')) continue;
+            const match = text.match(/"channelId":"(UC[\\w-]+)"/);
+            if (match) return match[1];
+          }
+          return '';
+        };
+        const channelId = findChannelId();
+        const title = document.querySelector('#owner #channel-name a')?.textContent?.trim() || document.querySelector('#channel-name #text')?.textContent?.trim() || document.querySelector('ytd-channel-name #text')?.textContent?.trim() || document.querySelector('ytd-channel-name #container')?.textContent?.trim() || document.querySelector('yt-dynamic-text-view-model h1')?.textContent?.trim() || document.querySelector('meta[itemprop="name"]')?.getAttribute('content') || document.querySelector('meta[property="og:title"]')?.getAttribute('content') || '';
+        const url = document.querySelector('#owner #channel-name a')?.href || document.querySelector('link[rel="canonical"]')?.getAttribute('href') || (channelId ? 'https://www.youtube.com/channel/' + channelId : '');
         if (!channelId || !title) return null;
         return { channelId, title, url };
       })();`
