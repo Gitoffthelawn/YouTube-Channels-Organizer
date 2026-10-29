@@ -140,6 +140,19 @@ function parseRssWithDom(xmlText) {
   }
 }
 
+// The regex fallback (always used in the MV3 service worker, which has no
+// DOMParser) sees raw XML, so entities like &amp; must be decoded by hand.
+function decodeXmlEntities(text) {
+  return text
+    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
 function parseRssFallback(xmlText) {
   const items = [];
   const entryRegex = /<entry>([\s\S]*?)<\/entry>/g;
@@ -147,13 +160,13 @@ function parseRssFallback(xmlText) {
   while ((match = entryRegex.exec(xmlText)) && items.length < VIDEOS_PER_CHANNEL) {
     const block = match[1];
     const videoId = (block.match(/<yt:videoId>(.*?)<\/yt:videoId>/) || [])[1] || "";
-    const title = (block.match(/<title>(<!\[CDATA\[)?([\s\S]*?)(\]\]>)?<\/title>/) || [])[2]?.trim() || "Untitled";
+    const title = decodeXmlEntities((block.match(/<title>(<!\[CDATA\[)?([\s\S]*?)(\]\]>)?<\/title>/) || [])[2]?.trim() || "Untitled");
     const link = (block.match(/<link rel="alternate" href="(.*?)"/) || [])[1] || `https://www.youtube.com/watch?v=${videoId}`;
     const publishedAt = (block.match(/<published>(.*?)<\/published>/) || [])[1] || new Date().toISOString();
     const thumbnail =
       (block.match(/<media:thumbnail url="(.*?)"/) || [])[1] ||
       `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-    const description = (block.match(/<media:description>([\s\S]*?)<\/media:description>/) || [])[1] || "";
+    const description = decodeXmlEntities((block.match(/<media:description>([\s\S]*?)<\/media:description>/) || [])[1] || "");
     const viewCount = Number((block.match(/<media:statistics views="(\d+)"/) || [])[1] || 0);
     items.push({ videoId, title, url: link, publishedAt, thumbnail, description, viewCount });
   }
@@ -191,7 +204,15 @@ async function fetchChannelFeed(channelId) {
   const parsed =
     parseRssWithDom(xml)?.filter(Boolean) ||
     parseRssFallback(xml);
-  return parsed.slice(0, VIDEOS_PER_CHANNEL);
+  return { videos: parsed.slice(0, VIDEOS_PER_CHANNEL), channelTitle: parseFeedAuthor(xml) };
+}
+
+// The feed's top-level <author><name> is the channel's own name, straight from
+// YouTube, so it's used to correct titles that were saved from a stale or
+// wrong page (e.g. a video title, or another channel's name).
+function parseFeedAuthor(xml) {
+  const name = xml.match(/<name>(<!\[CDATA\[)?([\s\S]*?)(\]\]>|)<\/name>/)?.[2]?.trim() || "";
+  return decodeXmlEntities(name);
 }
 
 async function loadVideosForCategory(categoryId) {
@@ -207,13 +228,21 @@ async function loadVideosForCategory(categoryId) {
       if (!channel) return [];
 
       const cached = state.videoCache[channelId];
-      const isFresh = cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
+      // Channels whose title hasn't been checked against the feed yet bypass
+      // the cache once, so names saved by older versions get corrected now.
+      const isFresh = cached && channel.titleFromFeed && Date.now() - cached.fetchedAt < CACHE_TTL_MS;
       let videos = cached?.videos || [];
 
       if (!isFresh) {
         try {
-          videos = await fetchChannelFeed(channelId);
+          const feed = await fetchChannelFeed(channelId);
+          videos = feed.videos;
           state.videoCache[channelId] = { fetchedAt: Date.now(), videos };
+          if (feed.channelTitle) {
+            channel.title = feed.channelTitle;
+            channel.titleFromFeed = true;
+          }
+          channel.url = `https://www.youtube.com/channel/${channelId}`;
         } catch (err) {
           errors.push({ channelId, channelTitle: channel.title, error: String(err.message || err) });
           console.warn("RSS fetch failed", channelId, err);
@@ -283,55 +312,111 @@ async function handleOptionsAction(message) {
   return { state: updated ? state : undefined };
 }
 
-async function resolveChannelFromUrl(url) {
-  // Try oEmbed first for channel name and URL.
+// Maps any supported YouTube page URL to the URL whose server-rendered HTML
+// describes the channel: watch pages by video id, channel pages by their base
+// path (so /@x/videos and /@x/shorts share one cache entry).
+function normalizeChannelSourceUrl(rawUrl) {
+  let url;
   try {
-    const oembed = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
-    if (oembed.ok) {
-      const data = await oembed.json();
-      const authorUrl = data.author_url || "";
-      const authorName = data.author_name || "";
-      const channelId =
-        authorUrl.match(/channel\/([^/]+)/)?.[1] ||
-        authorUrl.match(/user\/([^/]+)/)?.[1] ||
-        authorUrl.match(/c\/([^/]+)/)?.[1];
-      if (channelId) {
-        const normalizedId = channelId;
-        return {
-          channelId: normalizedId,
-          title: authorName || "YouTube Creator",
-          url: authorUrl || `https://www.youtube.com/channel/${normalizedId}`
-        };
+    url = new URL(rawUrl);
+  } catch (err) {
+    return null;
+  }
+  if (!/(^|\.)youtube\.com$/.test(url.hostname)) return null;
+  if (url.pathname === "/watch") {
+    const videoId = url.searchParams.get("v");
+    return videoId ? { kind: "video", videoId, url: `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` } : null;
+  }
+  const channelPath = url.pathname.match(/^\/(channel\/[^/]+|c\/[^/]+|user\/[^/]+|@[^/]+)/)?.[1];
+  return channelPath ? { kind: "channel", url: `https://www.youtube.com/${channelPath}` } : null;
+}
+
+// Pulls the JSON object assigned to `varName` out of a page's inline scripts.
+// Brace-matched rather than regex-terminated, since video descriptions can
+// contain arbitrary text like "};var" that would cut a lazy regex short.
+function extractInitialJson(html, varName) {
+  const marker = new RegExp(`${varName}\\s*=\\s*\\{`).exec(html);
+  if (!marker) return null;
+  const start = marker.index + marker[0].length - 1;
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < html.length; i++) {
+    const ch = html[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}" && --depth === 0) {
+      try {
+        return JSON.parse(html.slice(start, i + 1));
+      } catch (err) {
+        return null;
       }
     }
-  } catch (err) {
-    // ignore and try page scrape
   }
-
-  // Fallback: fetch the page and extract channelId from HTML.
-  try {
-    const res = await fetch(url, { credentials: "omit" });
-    if (res.ok) {
-      const html = await res.text();
-      const channelId = html.match(/"channelId":"(UC[^"]+)"/)?.[1];
-      const channelName =
-        html.match(/"channelName":"([^"]+)"/)?.[1] ||
-        html.match(/"ownerChannelName":"([^"]+)"/)?.[1] ||
-        html.match(/<meta itemprop="name" content="([^"]+)"/)?.[1] ||
-        "YouTube Creator";
-      if (channelId) {
-        return {
-          channelId,
-          title: channelName,
-          url: `https://www.youtube.com/channel/${channelId}`
-        };
-      }
-    }
-  } catch (err) {
-    // ignore
-  }
-
   return null;
+}
+
+function decodeJsonString(value) {
+  try {
+    return JSON.parse(`"${value}"`);
+  } catch (err) {
+    return value;
+  }
+}
+
+function parseChannelFromHtml(html, source) {
+  let channelId = "";
+  let title = "";
+
+  if (source.kind === "video") {
+    const details = extractInitialJson(html, "ytInitialPlayerResponse")?.videoDetails;
+    // Guard against ever attributing a video to the wrong channel: only trust
+    // the response if it is actually about the video we asked for.
+    if (details && details.videoId === source.videoId) {
+      channelId = details.channelId || "";
+      title = details.author || "";
+    }
+    if (!channelId) {
+      channelId = html.match(/"channelId":"(UC[\w-]{22})"/)?.[1] || "";
+      const owner = html.match(/"ownerChannelName":"((?:[^"\\]|\\.)*)"/)?.[1];
+      title = owner ? decodeJsonString(owner) : "";
+    }
+  } else {
+    const meta = extractInitialJson(html, "ytInitialData")?.metadata?.channelMetadataRenderer;
+    channelId = meta?.externalId || html.match(/"externalId":"(UC[\w-]{22})"/)?.[1] || "";
+    title = meta?.title || html.match(/<meta property="og:title" content="([^"]*)"/)?.[1] || "";
+  }
+
+  if (!channelId || !title) return null;
+  return { channelId, title, url: `https://www.youtube.com/channel/${channelId}` };
+}
+
+const channelResolveCache = new Map();
+const RESOLVE_TTL_MS = 10 * 60 * 1000;
+
+// Always resolves from freshly fetched server HTML instead of the tab's DOM:
+// YouTube is a SPA, so the inline <script> state and <meta> tags in an open
+// tab still describe whichever page was loaded first, not the current one.
+async function resolveChannelFromUrl(rawUrl) {
+  const source = normalizeChannelSourceUrl(rawUrl);
+  if (!source) return null;
+
+  const cached = channelResolveCache.get(source.url);
+  if (cached && Date.now() - cached.at < RESOLVE_TTL_MS) return cached.channel;
+
+  try {
+    const res = await fetch(source.url, { credentials: "include" });
+    if (!res.ok) return null;
+    const channel = parseChannelFromHtml(await res.text(), source);
+    if (channel) channelResolveCache.set(source.url, { channel, at: Date.now() });
+    return channel;
+  } catch (err) {
+    return null;
+  }
 }
 
 async function refreshChannelTitle(channelId) {

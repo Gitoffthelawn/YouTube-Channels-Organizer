@@ -23,6 +23,14 @@ groupToggleEl.querySelectorAll("button").forEach((btn) => {
   btn.classList.toggle("active", btn.dataset.group === groupMode);
 });
 
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+
 function timeAgo(dateStr) {
   const diff = Date.now() - new Date(dateStr).getTime();
   const minutes = Math.floor(diff / (1000 * 60));
@@ -61,7 +69,7 @@ function renderSidebar() {
     main.className = "category-row-main";
     main.innerHTML = `
       <span class="drag-handle">${ICONS.drag}</span>
-      <span class="category-name">${cat.name}</span>
+      <span class="category-name">${escapeHtml(cat.name)}</span>
       <span class="category-count">${cat.channelIds.length}</span>
       <span class="category-row-actions">
         <button data-action="rename" title="Rename">${ICONS.edit}</button>
@@ -246,7 +254,7 @@ function renderVideos() {
       section.className = "creator-group";
       const title = document.createElement("div");
       title.className = "creator-group-title";
-      title.innerHTML = `<span>${group.title}</span><button class="creator-group-remove" title="Remove creator from category">${ICONS.trash}</button>`;
+      title.innerHTML = `<span>${escapeHtml(group.title)}</span><button class="creator-group-remove" title="Remove creator from category">${ICONS.trash}</button>`;
       title.querySelector(".creator-group-remove").addEventListener("click", async () => {
         if (!activeCategoryId) return;
         if (!confirm(`Remove "${group.title}" from this category?`)) return;
@@ -275,10 +283,10 @@ function renderVideoCard(vid) {
   const viewsText = formatViews(vid.viewCount);
   card.innerHTML = `
     <div class="video-thumb">
-      <img src="${vid.thumbnail}" alt="${vid.title}" loading="lazy" />
+      <img src="${escapeHtml(vid.thumbnail)}" alt="${escapeHtml(vid.title)}" loading="lazy" />
     </div>
-    <a class="video-title" href="${vid.url}" data-video-id="${vid.videoId || ""}">${vid.title}</a>
-    <div class="meta">${vid.channelTitle} • ${timeAgo(vid.publishedAt)}${viewsText ? " • " + viewsText : ""}</div>
+    <a class="video-title" href="${escapeHtml(vid.url)}" data-video-id="${escapeHtml(vid.videoId)}">${escapeHtml(vid.title)}</a>
+    <div class="meta">${escapeHtml(vid.channelTitle)} • ${timeAgo(vid.publishedAt)}${viewsText ? " • " + viewsText : ""}</div>
   `;
   card.addEventListener("click", (e) => {
     e.preventDefault();
@@ -340,7 +348,7 @@ async function loadSuggestions(categoryId) {
     const chip = document.createElement("div");
     chip.className = "suggestion-chip";
     chip.innerHTML = `
-      <a href="${ch.url}" target="_blank" rel="noreferrer">${ch.title}</a>
+      <a href="${escapeHtml(ch.url)}" target="_blank" rel="noreferrer">${escapeHtml(ch.title)}</a>
       <button title="Save to this category">+</button>
     `;
     chip.querySelector("button").addEventListener("click", async () => {

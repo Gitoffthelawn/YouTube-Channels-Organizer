@@ -49,66 +49,8 @@ async function detectChannelFromTab() {
     return;
   }
 
-  // First try messaging the content script (if present).
-  try {
-    const res = await chrome.tabs.sendMessage(tab.id, { type: "GET_CHANNEL_INFO" });
-    if (res?.channel) {
-      currentTabChannel = res.channel;
-      statusMsg(`Detected: ${res.channel.title}`);
-      await showChannelMembership();
-      return;
-    }
-  } catch (e) {
-    // ignore; fall through to injected script
-  }
-
-  // Fallback: execute a small script to extract channel info.
-  try {
-    const [{ result }] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        const findChannelId = () => {
-          const canonicalId = document.querySelector('link[rel="canonical"]')?.href?.match(/channel\/(UC[\w-]+)/)?.[1];
-          if (canonicalId) return canonicalId;
-          const metaId = document.querySelector('meta[itemprop="channelId"]')?.getAttribute("content");
-          if (metaId) return metaId;
-          for (const script of document.querySelectorAll("script")) {
-            const text = script.textContent;
-            if (!text || !text.includes("channelId")) continue;
-            const match = text.match(/"channelId":"(UC[\w-]+)"/);
-            if (match) return match[1];
-          }
-          return "";
-        };
-        const channelId = findChannelId();
-        const title =
-          document.querySelector("#owner #channel-name a")?.textContent?.trim() ||
-          document.querySelector("#channel-name #text")?.textContent?.trim() ||
-          document.querySelector("ytd-channel-name #text")?.textContent?.trim() ||
-          document.querySelector("ytd-channel-name #container")?.textContent?.trim() ||
-          document.querySelector("yt-dynamic-text-view-model h1")?.textContent?.trim() ||
-          document.querySelector('meta[itemprop="name"]')?.getAttribute("content") ||
-          document.querySelector('meta[property="og:title"]')?.getAttribute("content") ||
-          "";
-        const url =
-          document.querySelector("#owner #channel-name a")?.href ||
-          document.querySelector('link[rel="canonical"]')?.getAttribute("href") ||
-          (channelId ? `https://www.youtube.com/channel/${channelId}` : "");
-        if (!channelId || !title) return null;
-        return { channelId, title, url };
-      }
-    });
-    if (result) {
-      currentTabChannel = result;
-      statusMsg(`Detected: ${result.title}`);
-      await showChannelMembership();
-      return;
-    }
-  } catch (err) {
-    // continue to URL resolver below
-  }
-
-  // Final fallback: resolve via background using oEmbed/page scrape.
+  // Resolved from the tab's current URL rather than its DOM: on YouTube's SPA
+  // the page's embedded metadata goes stale after in-page navigation.
   try {
     const res = await chrome.runtime.sendMessage({ type: "RESOLVE_CHANNEL_FROM_URL", url: tab.url });
     if (res?.channel) {
